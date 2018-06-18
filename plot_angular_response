@@ -1,0 +1,53 @@
+#!/usr/bin/python
+import h5py
+import sys
+from glob import glob
+from numpy import genfromtxt,sum
+from pylab import show,scatter,colorbar,xlabel,ylabel,title,imshow
+
+# Get directories from user
+h5FilesDir = str(sys.argv[1])
+logfilesTablePath = str(sys.argv[2])
+
+tableData = genfromtxt(logfilesTablePath, str)
+
+# Gets all the .h5 files from the specified directory
+if h5FilesDir.endswith("/"):
+    filePaths = glob(h5FilesDir+"*.h5")
+else:
+    h5FilesDir += "/"
+    filePaths = glob(h5FilesDir+"*.h5")
+
+
+countsPerSec = []
+elevation = []
+azimuth = []
+for i in filePaths:
+    fileName = i[len(h5FilesDir):(len(i) - len(".h5"))]
+
+    # Find files in the directory that match with the files on the table
+    for m in tableData:
+        if m[2] == fileName:   # m[2] is the logfile name on table
+
+            # Calculate counts per second
+            dataFile = h5py.File(i)
+            b = dataFile['data/tlm_sxm_data/hdr']['bin']
+            s = sum(b,1)
+            totalTime = float(32 * len(s)/2 + 18 * len(s)/2)
+            cps = sum(b) / totalTime
+
+            azimuth.append(float(m[0]))
+            elevation.append(float(m[1]))
+            countsPerSec.append(cps)
+
+            #imshow(b, origin='0', aspect="auto")
+
+show()
+scatter(azimuth,elevation,c=countsPerSec)
+title("SXM Angular Response")
+xlabel("Azimuth (deg)")
+ylabel("Elevation (deg)")
+colorbar().set_label("Counts/sec")
+show()
+
+

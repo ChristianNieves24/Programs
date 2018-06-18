@@ -1,0 +1,48 @@
+#!/usr/bin/python
+import sys
+import glob
+import os
+
+# Get the source and destination directories
+srcDir = str(sys.argv[1])
+dstDir = str(sys.argv[2])
+
+# Copy files '.tlm.log' files to the destination folder
+if srcDir.endswith("/"):
+    os.system("rsync -ruv "+srcDir+"*.tlm.log"+" "+dstDir)
+else:
+    srcDir += "/"
+    os.system("rsync -ruv "+srcDir+"*.tlm.log"+" "+dstDir)
+
+# Get the paths for the files in the destination folder
+if dstDir.endswith("/"):
+    filePaths = glob.glob(dstDir+"*.tlm.log")
+else:
+    dstDir += "/"
+    filePaths = glob.glob(dstDir+"*.tlm.log")
+
+# Create a folder for .h5 files
+h5FilesDir = dstDir + "h5_files"
+os.system("mkdir " + h5FilesDir)
+
+
+for i in filePaths:
+    # Get the file names and create a folder for each file
+    fileName = i[len(dstDir):(len(i)-len(".tlm.log"))]
+    fileDataDir = dstDir + fileName + "/"
+    os.system("mkdir " + fileDataDir)
+
+    # Parse data and save output files in the corresponding folder
+    os.system("rex_raw_parser "+ i + " " + fileDataDir + " -dtype base64 -c")
+
+    # Generate the '.h5' file for each file and save them in the
+    # h5_files folder
+    os.system("rex_hdf5_gen "+ fileDataDir + " " + fileName + ".h5")
+    os.system("mv " + fileName + ".h5 " + h5FilesDir)
+
+
+
+
+
+
+
