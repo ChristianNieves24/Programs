@@ -3,7 +3,7 @@ import h5py
 import sys
 from glob import glob
 from numpy import genfromtxt,sum
-from pylab import show,scatter,colorbar,xlabel,ylabel,title,imshow
+from pylab import show,scatter,colorbar,xlabel,ylabel,title
 
 # Get directories from user
 h5FilesDir = str(sys.argv[1])
@@ -22,6 +22,11 @@ else:
 countsPerSec = []
 elevation = []
 azimuth = []
+
+# Interval of bins (a,b)
+a = 175
+b = 225
+
 for i in filePaths:
     fileName = i[len(h5FilesDir):(len(i) - len(".h5"))]
 
@@ -31,23 +36,20 @@ for i in filePaths:
 
             # Calculate counts per second
             dataFile = h5py.File(i)
-            b = dataFile['data/tlm_sxm_data/hdr']['bin']
-            s = sum(b,1)
+            bins = dataFile['data/tlm_sxm_data/hdr']['bin'][:,a:b]
+
+            s = sum(bins,1)
             totalTime = float(32 * len(s)/2 + 18 * len(s)/2)
-            cps = sum(b) / totalTime
+            cps = sum(bins) / totalTime
 
             azimuth.append(float(m[0]))
             elevation.append(float(m[1]))
             countsPerSec.append(cps)
 
-            #imshow(b, origin='0', aspect="auto")
-
-show()
-scatter(azimuth,elevation,c=countsPerSec)
-title("SXM Angular Response")
+scatter(azimuth,elevation,c=countsPerSec,)
+title("SXM Angular Response (bins "+ str(a)+ " to " + str(b) + ")")
 xlabel("Azimuth (deg)")
 ylabel("Elevation (deg)")
 colorbar().set_label("Counts/sec")
 show()
-
 
