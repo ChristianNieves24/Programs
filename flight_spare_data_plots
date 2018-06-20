@@ -2,25 +2,54 @@
 import h5py
 import sys
 from glob import glob
-from numpy import genfromtxt, sum, array,sqrt,zeros
-from pylab import show, scatter, colorbar, xlabel, ylabel, title, imshow,plot, subplot, axvspan,xlim,ylim,axes
+from numpy import genfromtxt, sum, array,sqrt,zeros,exp, pi,arange, sin, cos,vstack,log
+from pylab import show, scatter,legend, colorbar, xlabel, ylabel, title, imshow,plot, subplot, axvspan,xlim,ylim,axes
+from scipy.optimize import curve_fit
 
 # Interval of bins (a,b)
 a = 180
 b = 230
 
+def gaussian_curve(x, a, p, w):
+    # a = amplitude
+    # p = peak position
+    # w = width
+
+    #return a*exp(-((x-p)**2)/(2*w**2)         # Regular gaussian
+    return a*exp(-(4*log(2)*(x-p)**2)/(w**2))  # In terms of FWTM
+
+
+def gaussian_fit(y, t1, t2, t3, x1, x2):
+    initValues = [t1,t2,t3]
+
+    fitValues = curve_fit(gaussian_curve,range(x1,x2),y,p0 = initValues)
+    amp = fitValues[0][0]
+    pkPos = fitValues[0][1]
+    width = fitValues[0][2]
+    fit = []
+    for i in range(a,b):
+        fit.append(gaussian_curve(i,amp,pkPos,width))
+
+    fitData = [fit,amp,pkPos,width]
+    return fitData
+
 
 def plot_bin(bns):
-    subplot(211)
-    for bn in bns:
-        imshow(bn, origin='0', aspect="auto", interpolation="bilinear")
-    axvspan(0,a, alpha=0.25, facecolor="black")
-    axvspan(b,len(bn[1])-1, alpha=0.25, facecolor="black")
+
+    imshow(vstack(bns), origin='0', aspect="auto",cmap="plasma")
+    axvspan(0,a, alpha=0.30, facecolor="black")
+    axvspan(b,len(bns[1][0])-1, alpha=0.3, facecolor="black")
+    colorbar()
 
 
 def plot_angular_response(az, el, cps):
-    subplot(223)
-    scatter(az, el, c=cps)
+
+
+    angle = arange(0, 2 * pi, 0.01)
+    for i in range(0,36,5):
+        plot(i * cos(angle), i * sin(angle), "--k", alpha=0.25, zorder=1)
+
+    scatter(az, el, c=cps, zorder=2,cmap="plasma")
     # title("SXM Angular Response (bins " + str(a) + " to " + str(b) + ")")
     xlabel("Azimuth (deg)")
     ylabel("Elevation (deg)")
@@ -29,39 +58,81 @@ def plot_angular_response(az, el, cps):
     colorbar().set_label("Counts/sec")
 
 
-def plot_events_rms(events):
-    subplot(224)
+def fit_events_rms(events):
+
+    s = zeros(len(events[0][0]),float)
+    for i in range(len(events)):
+        # Sum squares
+        s += (events[i][0])**2
+    m = s / len(events)
+    rms = sqrt(m)
+
+    plot(range(a,b), rms,"--o", label="Total RMS")
+
+    amp1 = max(rms)
+    pkPos1 = a+list(rms).index(max(rms))
+    width1 = 10
+
+    amp2 = max(rms[int(pkPos1)-a+10:])
+    pkPos2 = pkPos1+10
+    width2 = 10
+
+    rmsFit1 = gaussian_fit(rms,amp1,pkPos1,width1,a,b)[0]
+    rmsFit2 = gaussian_fit(rms[(b-a)-20:],amp2,pkPos2,width2,210,230)[0]
+
+    plot(range(a, b), rmsFit1, "--", label="Gaussian Fit 1")
+    plot(range(a, b), rmsFit2, "--", label="Gaussian Fit 2")
+    legend(loc="upper right")
+
+def plot_events_all(events):
 
     eventsByTime = []
     temp = []
-
+    addedFiles = []
     # Sort data from shortest time to longest
     for i in events:
         temp.append(i[1])
     while len(temp) != 0:
         for j in events:
-            if j[1] == min(temp):
+            if j[1] == min(temp) and (j[2] not in addedFiles):
                 eventsByTime.append(j)
+                addedFiles.append(j[2])
                 temp.remove(min(temp))
                 break
+    n=0
+    for i in eventsByTime:
+        subplot(5,8,n+1)
 
-    # Total RMS
-    s = zeros(len(events[0][0]),float)
-    for i in range(len(events)):
-        # Sum squares
-        s += (events[i][0])**2
+        amp = max(i[0])
+        pkPos = a + list(i[0]).index(max(i[0]))
+        width = 10
+        fit = gaussian_fit(i[0], amp, pkPos, width, a, b)[0]
 
-    m = s / len(events)
-    rms = sqrt(m)
-    plot(range(a,b), rms,"--o")
-    plot(range(a,b), eventsByTime[0][0],"--o")
-    plot(range(a,b), eventsByTime[len(eventsByTime)-1][0],"--o")
+        plot(range(a,b),i[0], label = str(i[1])+" sec")
+        plot(range(a, b), fit, "--", label="Fit")
+        title(str(n+1))
+        legend(loc="upper right")
+        n+=1
+    show()
 
-
+def fit_sections_rms(events):
+    n=0
+    m=0
+    for i in range(0,len(events), 6):
+        subplot(3, 3, n + 1)
+        eventSection = events[i:i+6]
+        fit_events_rms(eventSection)
+        m+=len(eventSection)
+        title(str(i+1)+" to "+str(m))
+        n+=1
+    show()
 
 # Get directories from user
-h5FilesDir = str(sys.argv[1])
-logfilesTablePath = str(sys.argv[2])
+#h5FilesDir = str(sys.argv[1])
+#logfilesTablePath = str(sys.argv[2])
+
+h5FilesDir = "/home/cnieves/PycharmProjects/CfA/flight_spare_data/h5_files"
+logfilesTablePath = "/home/cnieves/PycharmProjects/CfA/flight_spare_data/data_table.txt"
 
 tableData = genfromtxt(logfilesTablePath, str)
 
@@ -89,19 +160,18 @@ for i in filePaths:
             dataFile = h5py.File(i)
             binList.append(dataFile['data/tlm_sxm_data/hdr']['bin'])
             bins = dataFile['data/tlm_sxm_data/hdr']['bin'][:, a:b]
+            dataFile.close()
 
             s = sum(bins, 1)
             totalTime = float(32 * len(s) / 2 + 18 * len(s) / 2)
             cps = sum(bins) / totalTime
 
-            print(bins.shape)
-
             azimuth.append(float(m[0]))
             elevation.append(float(m[1]))
             countsPerSec.append(cps)
-            eventsTimeList.append([sum(bins,0), totalTime])
+            eventsTimeList.append([sum(bins,0), totalTime, fileName])
 
-plot_bin(binList)
-plot_angular_response(azimuth, elevation, countsPerSec)
-plot_events_rms(eventsTimeList)
-show()
+subplot(211),plot_bin(binList),subplot(223, aspect=1), plot_angular_response(azimuth, elevation, countsPerSec),subplot(224),fit_events_rms(eventsTimeList), show()
+plot_events_all(eventsTimeList)
+fit_sections_rms(eventsTimeList)
+
