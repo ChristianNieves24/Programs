@@ -2,14 +2,18 @@
 import h5py
 import sys
 from glob import glob
-from numpy import genfromtxt, sum, array,sqrt,zeros,exp, pi,arange, sin, cos,vstack,log
-from pylab import show, scatter,legend, colorbar, xlabel, ylabel, title, imshow,plot, subplot, axvspan,xlim,ylim,axes
+from math import factorial
+from numpy import genfromtxt, sum, array,sqrt,zeros,exp, pi,arange, sin, cos,vstack,log, mean, ones
+from pylab import show, text, scatter,legend, colorbar, xlabel, ylabel, title, imshow,plot, subplot, axvspan,xlim,ylim,stem,setp
+from matplotlib import gridspec
 from scipy.optimize import curve_fit
 
 # Interval of bins (a,b)
-a = 180
-b = 230
+a = 190
+b = 221
+c = 210
 
+# Gaussian curve equation function
 def gaussian_curve(x, a, p, w):
     # a = amplitude
     # p = peak position
@@ -18,8 +22,23 @@ def gaussian_curve(x, a, p, w):
     #return a*exp(-((x-p)**2)/(2*w**2)         # Regular gaussian
     return a*exp(-(4*log(2)*(x-p)**2)/(w**2))  # In terms of FWTM
 
+def chi2_test(observed,expected):
+    chi2 = 0
+    for i in range(len(observed)):
+        chi2 += ((observed[i]-expected[i])**2)/expected[i]
+        print ((observed[i]-expected[i])**2)/expected[i], (chi2)
+    return chi2
 
-def gaussian_fit(y, t1, t2, t3, x1, x2):
+
+#
+def poisson_distribution(ocurrences,rate):
+    return (rate**ocurrences)/(factorial(ocurrences)*exp(rate))
+
+
+
+
+# Returns a list with the fit values
+def gaussian_fit(y, t1, t2, t3, x1, x2,fullRange=1):
     initValues = [t1,t2,t3]
 
     fitValues = curve_fit(gaussian_curve,range(x1,x2),y,p0 = initValues)
@@ -27,21 +46,25 @@ def gaussian_fit(y, t1, t2, t3, x1, x2):
     pkPos = fitValues[0][1]
     width = fitValues[0][2]
     fit = []
-    for i in range(a,b):
-        fit.append(gaussian_curve(i,amp,pkPos,width))
-
+    if fullRange:
+        for i in range(a,b):
+            fit.append(gaussian_curve(i,amp,pkPos,width))
+    else:
+        for i in range(x1,x2):
+            fit.append(gaussian_curve(i,amp,pkPos,width))
     fitData = [fit,amp,pkPos,width]
     return fitData
 
 
+# Plot bin histogram
 def plot_bin(bns):
-
     imshow(vstack(bns), origin='0', aspect="auto",cmap="plasma")
     axvspan(0,a, alpha=0.30, facecolor="black")
     axvspan(b,len(bns[1][0])-1, alpha=0.3, facecolor="black")
     colorbar()
 
 
+# Plot the angular response
 def plot_angular_response(az, el, cps):
 
 
@@ -58,6 +81,7 @@ def plot_angular_response(az, el, cps):
     colorbar().set_label("Counts/sec")
 
 
+# Plot 2 gaussian fits for the data
 def fit_events_rms(events):
 
     s = zeros(len(events[0][0]),float)
@@ -67,7 +91,7 @@ def fit_events_rms(events):
     m = s / len(events)
     rms = sqrt(m)
 
-    plot(range(a,b), rms,"--o", label="Total RMS")
+    plot(range(a,b), rms,"--o",label="RMS",zorder=1)
 
     amp1 = max(rms)
     pkPos1 = a+list(rms).index(max(rms))
@@ -77,13 +101,26 @@ def fit_events_rms(events):
     pkPos2 = pkPos1+10
     width2 = 10
 
-    rmsFit1 = gaussian_fit(rms,amp1,pkPos1,width1,a,b)[0]
-    rmsFit2 = gaussian_fit(rms[(b-a)-20:],amp2,pkPos2,width2,210,230)[0]
+    rmsFit1 = gaussian_fit(rms[:(c-a)],amp1,pkPos1,width1,a,c)[0]
+    rmsFit2 = gaussian_fit(rms[(c-a):],amp2,pkPos2,width2,c,b)[0]
 
-    plot(range(a, b), rmsFit1, "--", label="Gaussian Fit 1")
-    plot(range(a, b), rmsFit2, "--", label="Gaussian Fit 2")
+    #chi2Fit1 = chisquare(rms[:(c-a)],rmsFit1[:(c-a)])[0]
+    #chi2Fit2 = chisquare(rms[(c-a):],rmsFit2[(c-a):])[0]
+
+    chi2Fit1 = chi2_test(rms[:(c-a)],rmsFit1[:(c-a)])
+    chi2Fit2 = chi2_test(rms[(c-a):],rmsFit2[(c-a):])
+    print chi2Fit1, chi2Fit2
+
+    plot(range(a, b), rmsFit1, "--", label=r"Fit 1 ($\chi^2$ = " +str(round(chi2Fit1,2)) + ")")
+    plot(range(a, b), rmsFit2, "--", label=r"Fit 2 ($\chi^2$= " + str(round(chi2Fit2,2)) + ")")
+
+    plot(range(a,b),array(rmsFit1)+array(rmsFit2), "--", label="Sum")
     legend(loc="upper right")
+   # xlabel("Bin Number")
+    ylabel("Events")
 
+
+# Plot counts vs bins for each individual bin array
 def plot_events_all(events):
 
     eventsByTime = []
@@ -115,6 +152,8 @@ def plot_events_all(events):
         n+=1
     show()
 
+
+# Plot counts vs bins for the RMS of several bin arrays
 def fit_sections_rms(events):
     n=0
     m=0
@@ -127,6 +166,70 @@ def fit_sections_rms(events):
         n+=1
     show()
 
+def rms_fit_and_residual_fit(events,sections=0):
+    if sections:
+        n = 0
+        m = 0
+        outerGrid = gridspec.GridSpec(2,4)
+        for i in range(0, len(events), 6):
+            innerGrid = gridspec.GridSpecFromSubplotSpec(2,1,subplot_spec=outerGrid[n])
+
+            eventSection = events[i:i + 6]
+            sp1 = subplot(innerGrid[0])
+            m += len(eventSection)
+            title(str(i+1)+" to "+str(m))
+            fit_events_rms(eventSection)
+            sp2 = subplot(innerGrid[1])
+            plot_residual_fit(eventSection)
+            setp(sp1.get_xticklabels(), visible=False)
+            n += 1
+        show()
+    else:
+        sp1 = subplot(211)
+        title("All Events RMS")
+        fit_events_rms(events)
+        subplot(212,sharex=sp1)
+        plot_residual_fit(events)
+        setp(sp1.get_xticklabels(), visible=False)
+        show()
+
+
+def plot_residual_fit(events):
+    s = zeros(len(events[0][0]), float)
+    for i in range(len(events)):
+        # Sum squares
+        s += (events[i][0]) ** 2
+    m = s / len(events)
+    rms = sqrt(m)
+
+    plot(range(a, b), rms, "--o", label="RMS")
+
+    amp1 = max(rms)
+    pkPos1 = a + list(rms).index(max(rms))
+    width1 = 10
+
+    amp2 = max(rms[int(pkPos1) - a + 10:])
+    pkPos2 = pkPos1 + 10
+    width2 = 10
+
+    rmsFit1 = gaussian_fit(rms[:(c - a)], amp1, pkPos1, width1, a, c,0)[0]
+    rmsFit2 = gaussian_fit(rms[(c - a):], amp2, pkPos2, width2, c, b,0)[0]
+
+    totalFit = rmsFit1+rmsFit2
+    chi2 = chi2_test(rms, totalFit)
+    plot(range(a,b),totalFit,"--r",label=r"Fit ($\chi^2$ = "+str(round(chi2,2))+")")
+
+
+    residual = array(rms) - array(totalFit)
+    stem(range(a,b),residual,"--c","oc", label="Residual (Avg = "+str(round(mean(residual),2))+")")
+    xlabel("Bin Number")
+    ylabel("Events")
+    legend(loc="upper right")
+
+
+
+
+
 # Get directories from user
 #h5FilesDir = str(sys.argv[1])
 #logfilesTablePath = str(sys.argv[2])
@@ -134,7 +237,7 @@ def fit_sections_rms(events):
 h5FilesDir = "/home/cnieves/PycharmProjects/CfA/flight_spare_data/h5_files"
 logfilesTablePath = "/home/cnieves/PycharmProjects/CfA/flight_spare_data/data_table.txt"
 
-tableData = genfromtxt(logfilesTablePath, str)
+tableData = genfromtxt(logfilesTablePath, str)   # Data from angular response measurements
 
 # Gets all the .h5 files from the specified directory
 if h5FilesDir.endswith("/"):
@@ -143,11 +246,12 @@ else:
     h5FilesDir += "/"
     filePaths = glob(h5FilesDir + "*.h5")
 
-countsPerSec = []
-elevation = []
-azimuth = []
-binList = []
-eventsTimeList = []
+countsPerSec = []     # Contains cps for each bin
+elevation = []        # Values for elevation (deg)
+azimuth = []          # Values for azimuth (deg)
+binList = []          # Contains the arrays for each individual 'bin'
+eventsTimeList = []   # [All counts, total time, name of the file] to be sorted by time
+counts = []           # All counts on each 'bin' array
 
 for i in filePaths:
     fileName = i[len(h5FilesDir):(len(i) - len(".h5"))]
@@ -164,14 +268,20 @@ for i in filePaths:
 
             s = sum(bins, 1)
             totalTime = float(32 * len(s) / 2 + 18 * len(s) / 2)
-            cps = sum(bins) / totalTime
+            totalCounts = sum(bins)
+            cps = totalCounts / totalTime
 
             azimuth.append(float(m[0]))
             elevation.append(float(m[1]))
             countsPerSec.append(cps)
             eventsTimeList.append([sum(bins,0), totalTime, fileName])
+            counts.append(bins)
 
-subplot(211),plot_bin(binList),subplot(223, aspect=1), plot_angular_response(azimuth, elevation, countsPerSec),subplot(224),fit_events_rms(eventsTimeList), show()
-plot_events_all(eventsTimeList)
-fit_sections_rms(eventsTimeList)
+#subplot(211),plot_bin(binList),subplot(223, aspect=1), plot_angular_response(azimuth, elevation, countsPerSec),subplot(224),fit_events_rms(eventsTimeList), show()
+#plot_events_all(eventsTimeList)
+#fit_sections_rms(eventsTimeList)
+#rms_fit_and_residual_fit(eventsTimeList,1)
 
+y = []
+for i in counts:
+    print i[]
