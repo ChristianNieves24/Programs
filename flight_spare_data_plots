@@ -78,7 +78,7 @@ def plot_angular_response(az, el, cps):
     ylabel("Elevation (deg)")
     xlim(-40,40)
     ylim(-40,40)
-    colorbar().set_label("Counts/sec")
+    #colorbar().set_label("Events/sec")
 
 
 # Plot 2 gaussian fits for the data
@@ -166,8 +166,8 @@ def fit_sections_rms(events):
         n+=1
     show()
 
-def rms_fit_and_residual_fit(events,sections=0):
-    if sections:
+def rms_fit_and_residual_fit(events,mode=0):
+    if mode == 1:
         n = 0
         m = 0
         outerGrid = gridspec.GridSpec(2,4)
@@ -184,11 +184,19 @@ def rms_fit_and_residual_fit(events,sections=0):
             setp(sp1.get_xticklabels(), visible=False)
             n += 1
         show()
-    else:
+    elif mode== 0:
         sp1 = subplot(211)
         title("All Events RMS")
         fit_events_rms(events)
         subplot(212,sharex=sp1)
+        plot_residual_fit(events)
+        setp(sp1.get_xticklabels(), visible=False)
+        show()
+    elif mode == 2:
+        sp1 = subplot(426)
+        title("All Events RMS")
+        fit_events_rms(events)
+        subplot(428, sharex=sp1)
         plot_residual_fit(events)
         setp(sp1.get_xticklabels(), visible=False)
         show()
@@ -252,6 +260,7 @@ azimuth = []          # Values for azimuth (deg)
 binList = []          # Contains the arrays for each individual 'bin'
 eventsTimeList = []   # [All counts, total time, name of the file] to be sorted by time
 counts = []           # All counts on each 'bin' array
+counts1 = []
 
 for i in filePaths:
     fileName = i[len(h5FilesDir):(len(i) - len(".h5"))]
@@ -269,19 +278,33 @@ for i in filePaths:
             s = sum(bins, 1)
             totalTime = float(32 * len(s) / 2 + 18 * len(s) / 2)
             totalCounts = sum(bins)
+            totalCounts1 = sum(bins[:35,:])
             cps = totalCounts / totalTime
 
             azimuth.append(float(m[0]))
             elevation.append(float(m[1]))
             countsPerSec.append(cps)
             eventsTimeList.append([sum(bins,0), totalTime, fileName])
-            counts.append(bins)
+            counts.append(totalCounts)
+            counts1.append(totalCounts1)
+
 
 #subplot(211),plot_bin(binList),subplot(223, aspect=1), plot_angular_response(azimuth, elevation, countsPerSec),subplot(224),fit_events_rms(eventsTimeList), show()
 #plot_events_all(eventsTimeList)
 #fit_sections_rms(eventsTimeList)
 #rms_fit_and_residual_fit(eventsTimeList,1)
 
-y = []
-for i in counts:
-    print i[]
+#subplot(211),plot_bin(binList),subplot(223, aspect=1), plot_angular_response(azimuth, elevation, counts), rms_fit_and_residual_fit(eventsTimeList,2)
+
+plot_angular_response(azimuth,elevation,countsPerSec)
+title("Angular Response (Events/sec)")
+colorbar().set_label("Events/sec")
+show()
+plot_angular_response(azimuth,elevation,counts)
+title("Angular Response (All Events)")
+colorbar().set_label("Events")
+show()
+plot_angular_response(azimuth,elevation,counts1)
+title("Angular Response (All Events in 14.5 min)")
+colorbar().set_label("Events")
+show()
