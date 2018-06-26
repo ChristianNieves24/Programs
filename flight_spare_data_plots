@@ -27,7 +27,7 @@ def chi2_test(observed,expected):
     for i in range(len(observed)):
         chi2 += ((observed[i]-expected[i])**2)/expected[i]
         print ((observed[i]-expected[i])**2)/expected[i], (chi2)
-    return chi2
+    return chi2/len(observed)
 
 
 #
@@ -35,6 +35,38 @@ def poisson_distribution(ocurrences,rate):
     return (rate**ocurrences)/(factorial(ocurrences)*exp(rate))
 
 
+def count_frecuency(bns, allCPS):
+    counts = []
+    reps = []
+    frec = []
+    totalMeasurements = 0
+    for i in bns:
+        for j in range(i.shape[0]):
+            for k in range(i.shape[1]):
+                c = i[j][k]
+                if c not in counts:
+                    counts.append(c)
+                    reps.append(1)
+                else:
+                    n = counts.index(c)
+                    reps[n] += 1
+        totalMeasurements += i.shape[0]*i.shape[1]
+    for i in reps:
+        frec.append(float(i)/totalMeasurements)
+    scatter(counts,frec)
+
+    averageCPS = mean(array(allCPS))
+    fit = []
+    for i in range(len(counts)):
+        fit.append(poisson_distribution(i,averageCPS))
+    plot(counts,fit,"--r", label="Poisson dist.", zorder=1)
+    chi2 = chi2_test(frec,fit)
+    print chi2
+    xlabel("Counts")
+    ylabel("Frequency")
+    legend(loc="upper right")
+    title("Count frequency")
+    show()
 
 
 # Returns a list with the fit values
@@ -261,6 +293,7 @@ binList = []          # Contains the arrays for each individual 'bin'
 eventsTimeList = []   # [All counts, total time, name of the file] to be sorted by time
 counts = []           # All counts on each 'bin' array
 counts1 = []
+bns = []
 
 for i in filePaths:
     fileName = i[len(h5FilesDir):(len(i) - len(".h5"))]
@@ -287,24 +320,27 @@ for i in filePaths:
             eventsTimeList.append([sum(bins,0), totalTime, fileName])
             counts.append(totalCounts)
             counts1.append(totalCounts1)
-
+            bns.append(bins)
 
 #subplot(211),plot_bin(binList),subplot(223, aspect=1), plot_angular_response(azimuth, elevation, countsPerSec),subplot(224),fit_events_rms(eventsTimeList), show()
 #plot_events_all(eventsTimeList)
 #fit_sections_rms(eventsTimeList)
-#rms_fit_and_residual_fit(eventsTimeList,1)
+rms_fit_and_residual_fit(eventsTimeList)
+
 
 #subplot(211),plot_bin(binList),subplot(223, aspect=1), plot_angular_response(azimuth, elevation, counts), rms_fit_and_residual_fit(eventsTimeList,2)
 
-plot_angular_response(azimuth,elevation,countsPerSec)
-title("Angular Response (Events/sec)")
-colorbar().set_label("Events/sec")
-show()
-plot_angular_response(azimuth,elevation,counts)
-title("Angular Response (All Events)")
-colorbar().set_label("Events")
-show()
-plot_angular_response(azimuth,elevation,counts1)
-title("Angular Response (All Events in 14.5 min)")
-colorbar().set_label("Events")
-show()
+#plot_angular_response(azimuth,elevation,countsPerSec)
+#title("Angular Response (Events/sec)")
+#colorbar().set_label("Events/sec")
+#show()
+#plot_angular_response(azimuth,elevation,counts)
+#title("Angular Response (All Events)")
+#colorbar().set_label("Events")
+#show()
+#plot_angular_response(azimuth,elevation,counts1)
+#title("Angular Response (All Events in 14.5 min)")
+#colorbar().set_label("Events")
+#show()
+
+#count_frecuency(bns,cps)
