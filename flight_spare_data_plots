@@ -13,21 +13,41 @@ a = 190
 b = 221
 c = 210
 
+
+def sort_mesurements_by_time(events):
+    eventsByTime = []
+    temp = []
+    addedFiles = []
+    # Sort data from shortest time to longest
+    for i in events:
+        temp.append(i[1])
+    while len(temp) != 0:
+        for j in events:
+            if j[1] == min(temp) and (j[2] not in addedFiles):
+                eventsByTime.append(j)
+                addedFiles.append(j[2])
+                temp.remove(min(temp))
+                break
+    return eventsByTime
+
 # Gaussian curve equation function
 def gaussian_curve(x, a, p, w):
-    # a = amplitude
-    # p = peak position
-    # w = width
+    # a = amplitude       (gain?)
+    # p = peak position   
+    # w = width           (resolution)
 
     #return a*exp(-((x-p)**2)/(2*w**2)         # Regular gaussian
     return a*exp(-(4*log(2)*(x-p)**2)/(w**2))  # In terms of FWTM
 
-def chi2_test(observed,expected):
+
+def chi2_test(observed,expected,wholeFit=0):
     chi2 = 0
     for i in range(len(observed)):
         chi2 += ((observed[i]-expected[i])**2)/expected[i]
-        print ((observed[i]-expected[i])**2)/expected[i], (chi2)
-    return chi2/len(observed)
+    if wholeFit:
+        return chi2/(len(observed)-6)
+    else:
+        return chi2 / (len(observed) - 3)
 
 
 #
@@ -114,7 +134,7 @@ def plot_angular_response(az, el, cps):
 
 
 # Plot 2 gaussian fits for the data
-def fit_events_rms(events):
+def fit_events_rms(events, returnFitParam=0):
 
     s = zeros(len(events[0][0]),float)
     for i in range(len(events)):
@@ -122,8 +142,6 @@ def fit_events_rms(events):
         s += (events[i][0])**2
     m = s / len(events)
     rms = sqrt(m)
-
-    plot(range(a,b), rms,"--o",label="RMS",zorder=1)
 
     amp1 = max(rms)
     pkPos1 = a+list(rms).index(max(rms))
@@ -133,41 +151,35 @@ def fit_events_rms(events):
     pkPos2 = pkPos1+10
     width2 = 10
 
-    rmsFit1 = gaussian_fit(rms[:(c-a)],amp1,pkPos1,width1,a,c)[0]
-    rmsFit2 = gaussian_fit(rms[(c-a):],amp2,pkPos2,width2,c,b)[0]
+    fit1Data = gaussian_fit(rms[:(c-a)],amp1,pkPos1,width1,a,c)
+    fit2Data = gaussian_fit(rms[(c-a):],amp2,pkPos2,width2,c,b)
+
+    rmsFit1 = fit1Data[0]
+    rmsFit2 = fit2Data[0]
 
     #chi2Fit1 = chisquare(rms[:(c-a)],rmsFit1[:(c-a)])[0]
     #chi2Fit2 = chisquare(rms[(c-a):],rmsFit2[(c-a):])[0]
 
     chi2Fit1 = chi2_test(rms[:(c-a)],rmsFit1[:(c-a)])
     chi2Fit2 = chi2_test(rms[(c-a):],rmsFit2[(c-a):])
-    print chi2Fit1, chi2Fit2
 
-    plot(range(a, b), rmsFit1, "--", label=r"Fit 1 ($\chi^2$ = " +str(round(chi2Fit1,2)) + ")")
-    plot(range(a, b), rmsFit2, "--", label=r"Fit 2 ($\chi^2$= " + str(round(chi2Fit2,2)) + ")")
+    if returnFitParam:
+        return [[fit1Data,chi2Fit1],[fit2Data,chi2Fit2]]
+    else:
 
-    plot(range(a,b),array(rmsFit1)+array(rmsFit2), "--", label="Sum")
-    legend(loc="upper right")
-   # xlabel("Bin Number")
-    ylabel("Events")
+        plot(range(a, b), rms, "--o", label="RMS", zorder=1)
+        plot(range(a, b), rmsFit1, "--", label=r"Fit 1 ($\chi^2$ = " +str(round(chi2Fit1,2)) + ")")
+        plot(range(a, b), rmsFit2, "--", label=r"Fit 2 ($\chi^2$= " + str(round(chi2Fit2,2)) + ")")
+
+        plot(range(a,b),array(rmsFit1)+array(rmsFit2), "--", label="Sum")
+        legend(loc="upper right")
+        #xlabel("Bin Number")
+        ylabel("Events")
 
 
 # Plot counts vs bins for each individual bin array
 def plot_events_all(events):
-
-    eventsByTime = []
-    temp = []
-    addedFiles = []
-    # Sort data from shortest time to longest
-    for i in events:
-        temp.append(i[1])
-    while len(temp) != 0:
-        for j in events:
-            if j[1] == min(temp) and (j[2] not in addedFiles):
-                eventsByTime.append(j)
-                addedFiles.append(j[2])
-                temp.remove(min(temp))
-                break
+    eventsByTime = sort_mesurements_by_time(events)
     n=0
     for i in eventsByTime:
         subplot(5,8,n+1)
@@ -177,8 +189,10 @@ def plot_events_all(events):
         width = 10
         fit = gaussian_fit(i[0], amp, pkPos, width, a, b)[0]
 
-        plot(range(a,b),i[0], label = str(i[1])+" sec")
-        plot(range(a, b), fit, "--", label="Fit")
+        chi2 = chi2_test(i[0],fit)
+
+        plot(range(a,b),i[0], "--o",label = str(i[1])+" sec")
+        plot(range(a, b), fit, "--", label="Fit ($\chi^2$= " + str(round(chi2,2)) + ")")
         title(str(n+1))
         legend(loc="upper right")
         n+=1
@@ -187,11 +201,12 @@ def plot_events_all(events):
 
 # Plot counts vs bins for the RMS of several bin arrays
 def fit_sections_rms(events):
+    eventsByTime = sort_mesurements_by_time(events)
     n=0
     m=0
-    for i in range(0,len(events), 6):
+    for i in range(0,len(eventsByTime), 6):
         subplot(3, 3, n + 1)
-        eventSection = events[i:i+6]
+        eventSection = eventsByTime[i:i+6]
         fit_events_rms(eventSection)
         m+=len(eventSection)
         title(str(i+1)+" to "+str(m))
@@ -199,14 +214,16 @@ def fit_sections_rms(events):
     show()
 
 def rms_fit_and_residual_fit(events,mode=0):
-    if mode == 1:
+    eventsByTime = sort_mesurements_by_time(events)
+
+    if mode == 1:        # By sections
         n = 0
         m = 0
         outerGrid = gridspec.GridSpec(2,4)
-        for i in range(0, len(events), 6):
+        for i in range(0, len(eventsByTime), 6):
             innerGrid = gridspec.GridSpecFromSubplotSpec(2,1,subplot_spec=outerGrid[n])
 
-            eventSection = events[i:i + 6]
+            eventSection = eventsByTime[i:i + 6]
             sp1 = subplot(innerGrid[0])
             m += len(eventSection)
             title(str(i+1)+" to "+str(m))
@@ -216,7 +233,7 @@ def rms_fit_and_residual_fit(events,mode=0):
             setp(sp1.get_xticklabels(), visible=False)
             n += 1
         show()
-    elif mode== 0:
+    elif mode== 0:       # For all RMS
         sp1 = subplot(211)
         title("All Events RMS")
         fit_events_rms(events)
@@ -224,7 +241,7 @@ def rms_fit_and_residual_fit(events,mode=0):
         plot_residual_fit(events)
         setp(sp1.get_xticklabels(), visible=False)
         show()
-    elif mode == 2:
+    elif mode == 2:      # For plotting with ang res and hist
         sp1 = subplot(426)
         title("All Events RMS")
         fit_events_rms(events)
@@ -256,7 +273,7 @@ def plot_residual_fit(events):
     rmsFit2 = gaussian_fit(rms[(c - a):], amp2, pkPos2, width2, c, b,0)[0]
 
     totalFit = rmsFit1+rmsFit2
-    chi2 = chi2_test(rms, totalFit)
+    chi2 = chi2_test(rms, totalFit,1)
     plot(range(a,b),totalFit,"--r",label=r"Fit ($\chi^2$ = "+str(round(chi2,2))+")")
 
 
@@ -266,13 +283,70 @@ def plot_residual_fit(events):
     ylabel("Events")
     legend(loc="upper right")
 
+# Plot parameter data from the fits
+def plot_fit_parameters(events):
+    eventsByTime = sort_mesurements_by_time(events)
+    n=0
+    m=0
+    listOfFitParameters = []
+    for i in range(0,len(eventsByTime), 6):
+        eventSection = eventsByTime[i:i+6]
+        listOfFitParameters.append(fit_events_rms(eventSection,1))
+    chi2F1 = []
+    ampF1 = []
+    pkPosF1 = []
+    widthF1 = []
 
+    chi2F2 = []
+    ampF2 = []
+    pkPosF2 = []
+    widthF2 = []
+
+    for i in listOfFitParameters:
+        chi2F1.append(i[0][1])
+        ampF1.append(i[0][0][1])
+        pkPosF1.append(i[0][0][2])
+        widthF1.append(i[0][0][3])
+
+        chi2F2.append(i[1][1])
+        ampF2.append(i[1][0][1])
+        pkPosF2.append(i[1][0][2])
+        widthF2.append(i[1][0][3])
+
+        print i[0][0][2], i[1][0][2]
+
+    sp1 = subplot(423)
+    plot(pkPosF1, "-r", label="Peak Position")
+    ylim(201, 204)
+    title("Fit 1")
+    legend(loc="upper left")
+
+    subplot(223,sharex=sp1)
+    setp(sp1.get_xticklabels(), visible=False)
+    plot(chi2F1, label="$\chi^2$")
+    plot(ampF1, label="Height")
+    plot(widthF1, label="Width")
+    legend(loc="upper left")
+
+    sp2 = subplot(424)
+    plot(pkPosF2,"-r", label="Peak Position")
+    ylim(210, 215)
+    title("Fit 2")
+    legend(loc="upper left")
+
+    subplot(224, sharex=sp2)
+    setp(sp2.get_xticklabels(), visible=False)
+    plot(chi2F2, label="$\chi^2$")
+    plot(ampF2, label="Height")
+    plot(widthF2, label="Width")
+    legend(loc="upper left")
+    show()
 
 
 
 # Get directories from user
-#h5FilesDir = str(sys.argv[1])
-#logfilesTablePath = str(sys.argv[2])
+# h5FilesDir = str(sys.argv[1])
+# logfilesTablePath = str(sys.argv[2])
 
 h5FilesDir = "/home/cnieves/PycharmProjects/CfA/flight_spare_data/h5_files"
 logfilesTablePath = "/home/cnieves/PycharmProjects/CfA/flight_spare_data/data_table.txt"
@@ -325,7 +399,8 @@ for i in filePaths:
 #subplot(211),plot_bin(binList),subplot(223, aspect=1), plot_angular_response(azimuth, elevation, countsPerSec),subplot(224),fit_events_rms(eventsTimeList), show()
 #plot_events_all(eventsTimeList)
 #fit_sections_rms(eventsTimeList)
-rms_fit_and_residual_fit(eventsTimeList)
+
+
 
 
 #subplot(211),plot_bin(binList),subplot(223, aspect=1), plot_angular_response(azimuth, elevation, counts), rms_fit_and_residual_fit(eventsTimeList,2)
@@ -344,3 +419,10 @@ rms_fit_and_residual_fit(eventsTimeList)
 #show()
 
 #count_frecuency(bns,cps)
+
+
+#fit_events_rms(eventsTimeList)
+
+
+rms_fit_and_residual_fit(eventsTimeList)
+#plot_fit_parameters(eventsTimeList)
