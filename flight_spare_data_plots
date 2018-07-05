@@ -12,14 +12,18 @@ from scipy.optimize import curve_fit
 # Interval of bins (a,b)
 a = 190
 b = 221
-c = 210
+c = 210   # approximate point where the two gaussians
 
 
 # Sorts histograms from shortest time to longest
-def sort_mesurements_by_time(events):
-    # Parameters |
-    #----------------------------------------------------------
-    # event      | list => [counts (1D array), time, filenames]
+def sort_mesurements_by_time(events, remover=0):
+    # Parameters--|
+    # ---------------------------------------------------------
+    # event       | list => [counts (1D array), time, filenames]
+    # ---------------------------------------------------------
+    # Returns-----|
+    # ---------------------------------------------------------
+    # eventsByTime| list => [counts (1D array), time, filenames]
 
     eventsByTime = []
     temp = []
@@ -35,6 +39,16 @@ def sort_mesurements_by_time(events):
                 addedFiles.append(j[2])
                 temp.remove(min(temp))
                 break
+    indexList = []
+    if remover==1:
+        for i in range(len(eventsByTime)):
+            if max(eventsByTime[i][0]) < 10:
+                indexList.append(i)
+                print i
+        m = 0
+        for n in indexList:
+            eventsByTime.pop(n-m)
+            m += 1
     return eventsByTime
 
 
@@ -191,19 +205,24 @@ def plot_angular_response(az, el, cps):
 
 
 # Plot 2 gaussian fits for the data
-def fit_events_rms(events, returnFitParam=0):
+def fit_events_rms(events, returnFitParam=0, noRMS=0):
     # Parameters     |
     #--------------------------------------------------------------
     # event          | list => [counts (1D array), time, filenames]
     # returnFitParam | = 0 plots the 2 gaussian fits
     # ^^^^^^^^^^^^^^^| = 1 returns list with fit parameters
 
-    s = zeros(len(events[0][0]),float)
-    for i in range(len(events)):
-        # Sum squares
-        s += (events[i][0])**2
-    m = s / len(events)
-    rms = sqrt(m)
+    s = zeros(len(events[0][0]), float)
+    if noRMS==0:
+        for i in range(len(events)):
+            # Sum squares
+            s += (events[i][0])**2
+        m = s / len(events)
+        rms = sqrt(m)
+    elif noRMS==1:
+        for i in range(len(events)):
+            s += (events[i][0])
+        rms = s
 
     amp1 = max(rms)
     pkPos1 = a+list(rms).index(max(rms))
@@ -240,12 +259,15 @@ def fit_events_rms(events, returnFitParam=0):
 
 
 # Plot counts vs bins for each individual bin array
-def plot_events_all(events):
+def plot_events_all(events, removeBad=0):
     # Parameters     |
     #--------------------------------------------------------------
     # event          | list => [counts (1D array), time, filenames]
 
-    eventsByTime = sort_mesurements_by_time(events)
+    if removeBad==0:
+        eventsByTime = sort_mesurements_by_time(events)
+    elif removeBad == 1:
+        eventsByTime = sort_mesurements_by_time(events,1)
     n=0
     for i in eventsByTime:
         subplot(5,8,n+1)
@@ -266,7 +288,7 @@ def plot_events_all(events):
 
 
 # Plot counts vs bins for the RMS of several bin arrays
-def fit_sections_rms(events):
+def fit_sections_rms(events, countsOnly=0):
     # Parameters     |
     #--------------------------------------------------------------
     # event          | list => [counts (1D array), time, filenames]
@@ -277,7 +299,10 @@ def fit_sections_rms(events):
     for i in range(0,len(eventsByTime), 6):
         subplot(3, 3, n + 1)
         eventSection = eventsByTime[i:i+6]
-        fit_events_rms(eventSection)
+        if countsOnly == 0:
+            fit_events_rms(eventSection)
+        elif countsOnly == 1:
+            fit_events_rms(eventSection,0,1)
         m+=len(eventSection)
         title(str(i+1)+" to "+str(m))
         n+=1
@@ -285,7 +310,7 @@ def fit_sections_rms(events):
 
 
 # Plot RMS fits and residuals
-def rms_fit_and_residual_fit(events,mode=0):
+def rms_fit_and_residual_fit(events,s,mode=0):
     # Parameters     |
     # ------------------------------------------------------------------------------
     # event          | list => [counts (1D array), time, filenames]
@@ -298,11 +323,11 @@ def rms_fit_and_residual_fit(events,mode=0):
     if mode == 1:
         n = 0
         m = 0
-        outerGrid = gridspec.GridSpec(2,4)
-        for i in range(0, len(eventsByTime), 6):
+        outerGrid = gridspec.GridSpec(2,5)
+        for i in range(0, len(eventsByTime), s):
             innerGrid = gridspec.GridSpecFromSubplotSpec(2,1,subplot_spec=outerGrid[n])
 
-            eventSection = eventsByTime[i:i + 6]
+            eventSection = eventsByTime[i:i + s]
             sp1 = subplot(innerGrid[0])
             m += len(eventSection)
             title(str(i+1)+" to "+str(m))
@@ -369,18 +394,25 @@ def plot_residual_fit(events):
 
 
 # Plot parameter data from the fits
-def plot_fit_parameters(events):
+def plot_fit_parameters(events, s, countsOnly=0, removeBad=0):
     # Parameters     |
     # -------------------------------------------------------------
     # event          | list => [counts (1D array), time, filenames]
+    # s              | int => number of histograms in one section
 
-    eventsByTime = sort_mesurements_by_time(events)
+    if removeBad==1:
+        eventsByTime = sort_mesurements_by_time(events,1)
+    else:
+        eventsByTime = sort_mesurements_by_time(events)
     n=0
     m=0
     listOfFitParameters = []
-    for i in range(0,len(eventsByTime), 6):
-        eventSection = eventsByTime[i:i+6]
-        listOfFitParameters.append(fit_events_rms(eventSection,1))
+    for i in range(0,len(eventsByTime), s):
+        eventSection = eventsByTime[i:i + s]
+        if countsOnly==0:
+            listOfFitParameters.append(fit_events_rms(eventSection,1))
+        elif countsOnly==1:
+            listOfFitParameters.append(fit_events_rms(eventSection, 1, 1))
 
     chi2F1 = []
     ampF1 = []
@@ -444,6 +476,11 @@ def plot_fit_parameters(events):
     legend(loc="upper left")
     show()
 
+    #print("Results-----------")
+    #for i in range(len(ampF1)):
+    #    print("Height: F1: " + str(round(ampF1[i],3)) + "|" + str(round(ampErrF1[i],3)) + " || F2: "+ str(round(ampF2[i],3)) + "|" + str(round(ampErrF2[i],3)))
+    #    print("PkPos : F1: " + str(round(pkPosF1[i], 3)) + "|" + str(round(pkPosErrF1[i], 3)) + " || F2: " + str(round(pkPosF2[i], 3)) + "|" + str(round(pkPosErrF2[i], 3)))
+    #    print("Width: F1: " + str(round(widthF1[i], 3)) + "|" + str(round(widthErrF1[i], 3)) + " || F2: " + str(round(widthF2[i], 3)) + "|" + str(round(widthErrF2[i], 3)))
 
 # Get directories from user
 # h5FilesDir = str(sys.argv[1])
@@ -530,5 +567,15 @@ for i in filePaths:
 #fit_events_rms(eventsTimeList)
 
 
-rms_fit_and_residual_fit(eventsTimeList,1)
-plot_fit_parameters(eventsTimeList)
+#rms_fit_and_residual_fit(eventsTimeList,5,1)
+
+#fit_sections_rms(eventsTimeList,0) # counts RMS
+#fit_sections_rms(eventsTimeList,1) # total counts
+
+#plot_fit_parameters(eventsTimeList,6,0) # counts RMS
+#plot_fit_parameters(eventsTimeList,6,1) # total counts
+
+#plot_events_all(eventsTimeList,0)
+plot_events_all(eventsTimeList,1)
+
+plot_fit_parameters(eventsTimeList,4,0,1)
