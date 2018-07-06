@@ -16,6 +16,32 @@ b = 221
 c = 210   # approximate point where the two gaussians
 
 
+def sort_and_split_by_time(events,remover=0):
+    sortedEvents = sort_mesurements_by_time(events,remover)
+    values = 1
+    for i in range(len(sortedEvents)):
+        if i != (len(sortedEvents)-1):
+            if sortedEvents[i][1] != sortedEvents[i+1][1]:
+              values +=1
+
+    splitEventList = []
+    for i in range(values):
+        splitEventList.append([])
+
+    n = 0
+    for i in range(values):
+        splitEventList[i].append(sortedEvents[n])
+        n +=1
+        for j in range(n,len(sortedEvents)):
+            if sortedEvents[j][1] == splitEventList[i][-1][1]:
+                splitEventList[i].append(sortedEvents[j])
+                n += 1
+            else:
+                break
+
+    return splitEventList
+
+
 # Sorts histograms from shortest time to longest
 def sort_mesurements_by_time(events, remover=0):
     # Parameters--|
@@ -45,7 +71,6 @@ def sort_mesurements_by_time(events, remover=0):
         for i in range(len(eventsByTime)):
             if max(eventsByTime[i][0]) < 10:
                 indexList.append(i)
-                print i
         m = 0
         for n in indexList:
             eventsByTime.pop(n-m)
@@ -289,24 +314,36 @@ def plot_events_all(events, removeBad=0):
 
 
 # Plot counts vs bins for the RMS of several bin arrays
-def fit_sections_rms(events, countsOnly=0):
+def fit_sections_rms(events, countsOnly=0, groupByTime=0,remover=0):
     # Parameters     |
     #--------------------------------------------------------------
     # event          | list => [counts (1D array), time, filenames]
 
-    eventsByTime = sort_mesurements_by_time(events)
-    n=0
-    m=0
-    for i in range(0,len(eventsByTime), 6):
-        subplot(3, 3, n + 1)
-        eventSection = eventsByTime[i:i+6]
-        if countsOnly == 0:
-            fit_events_rms(eventSection)
-        elif countsOnly == 1:
-            fit_events_rms(eventSection,0,1)
-        m+=len(eventSection)
-        title(str(i+1)+" to "+str(m))
-        n+=1
+    if groupByTime==0:
+        eventsByTime = sort_mesurements_by_time(events)
+        n=0
+        m=0
+        for i in range(0,len(eventsByTime), 6):
+            subplot(3, 3, n + 1)
+            eventSection = eventsByTime[i:i+6]
+            if countsOnly == 0:
+                fit_events_rms(eventSection)
+            elif countsOnly == 1:
+                fit_events_rms(eventSection,0,1)
+            m+=len(eventSection)
+            # title(str(i+1)+" to "+str(m))
+            n+=1
+    if groupByTime==1:
+
+        eventsByTime = sort_and_split_by_time(events, remover)  # [:(len(sort_and_split_by_time(events,remover)))-2]
+        eventsByTime.pop(len(eventsByTime) - 2)
+        n=0
+        for i in eventsByTime:
+            subplot(3, 3, n + 1)
+            fit_events_rms(i,0,0)
+            n +=1
+            title(str(i[0][1])+"s")
+
     show()
 
 
@@ -395,25 +432,27 @@ def plot_residual_fit(events):
 
 
 # Plot parameter data from the fits
-def plot_fit_parameters(events, s, countsOnly=0, removeBad=0):
+def plot_fit_parameters(events, s, countsOnly=0, remover=0, groupByTime=0):
     # Parameters     |
     # -------------------------------------------------------------
     # event          | list => [counts (1D array), time, filenames]
     # s              | int => number of histograms in one section
 
-    if removeBad==1:
-        eventsByTime = sort_mesurements_by_time(events,1)
-    else:
-        eventsByTime = sort_mesurements_by_time(events)
-    n=0
-    m=0
     listOfFitParameters = []
-    for i in range(0,len(eventsByTime), s):
-        eventSection = eventsByTime[i:i + s]
-        if countsOnly==0:
-            listOfFitParameters.append(fit_events_rms(eventSection,1))
-        elif countsOnly==1:
-            listOfFitParameters.append(fit_events_rms(eventSection, 1, 1))
+    if groupByTime==0:
+        eventsByTime = sort_mesurements_by_time(events,remover)
+        for i in range(0,len(eventsByTime), s):
+            eventSection = eventsByTime[i:i + s]
+            if countsOnly==0:
+                listOfFitParameters.append(fit_events_rms(eventSection,1))
+            elif countsOnly==1:
+                listOfFitParameters.append(fit_events_rms(eventSection, 1, 1))
+    elif groupByTime==1:
+        eventsByTime = sort_and_split_by_time(events,remover) #[:(len(sort_and_split_by_time(events,remover)))-2]
+        eventsByTime.pop(len(eventsByTime)-2)
+        for i in eventsByTime:
+            listOfFitParameters.append(fit_events_rms(i,1,0))
+
 
     chi2F1 = []
     ampF1 = []
@@ -577,6 +616,11 @@ for i in filePaths:
 #plot_fit_parameters(eventsTimeList,6,1) # total counts
 
 #plot_events_all(eventsTimeList,0)
-plot_events_all(eventsTimeList,1)
+#plot_events_all(eventsTimeList,1)
 
-plot_fit_parameters(eventsTimeList,6,0,1)
+#plot_fit_parameters(eventsTimeList,6,0,1)
+
+#sort_and_split_by_time(eventsTimeList,1)
+
+fit_sections_rms(eventsTimeList,0,1,1)
+plot_fit_parameters(eventsTimeList,6,0,1,1)
