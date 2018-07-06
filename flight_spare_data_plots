@@ -348,7 +348,7 @@ def fit_sections_rms(events, countsOnly=0, groupByTime=0,remover=0):
 
 
 # Plot RMS fits and residuals
-def rms_fit_and_residual_fit(events,s,mode=0):
+def rms_fit_and_residual_fit(events,s,mode=0, remover=0, groupByTime=0):
     # Parameters     |
     # ------------------------------------------------------------------------------
     # event          | list => [counts (1D array), time, filenames]
@@ -356,25 +356,43 @@ def rms_fit_and_residual_fit(events,s,mode=0):
     # ^^^^^^^^^^^^^^^| = 1 plot for the overall RMS
     # ^^^^^^^^^^^^^^^| = 2 plot for overall RMS to be put along hist and ag response
 
-    eventsByTime = sort_mesurements_by_time(events)
-
     if mode == 1:
-        n = 0
-        m = 0
-        outerGrid = gridspec.GridSpec(2,5)
-        for i in range(0, len(eventsByTime), s):
-            innerGrid = gridspec.GridSpecFromSubplotSpec(2,1,subplot_spec=outerGrid[n])
+        if groupByTime == 0:
+            eventsByTime = sort_mesurements_by_time(events,remover)
+            if mode == 1:
+                n = 0
+                m = 0
+                outerGrid = gridspec.GridSpec(2,5)
+                for i in range(0, len(eventsByTime), s):
+                    innerGrid = gridspec.GridSpecFromSubplotSpec(2,1,subplot_spec=outerGrid[n])
 
-            eventSection = eventsByTime[i:i + s]
-            sp1 = subplot(innerGrid[0])
-            m += len(eventSection)
-            title(str(i+1)+" to "+str(m))
-            fit_events_rms(eventSection)
-            sp2 = subplot(innerGrid[1])
-            plot_residual_fit(eventSection)
-            setp(sp1.get_xticklabels(), visible=False)
-            n += 1
-        show()
+                    eventSection = eventsByTime[i:i + s]
+                    sp1 = subplot(innerGrid[0])
+                    m += len(eventSection)
+                    title(str(i+1)+" to "+str(m))
+                    fit_events_rms(eventSection)
+                    sp2 = subplot(innerGrid[1])
+                    plot_residual_fit(eventSection)
+                    setp(sp1.get_xticklabels(), visible=False)
+                    n += 1
+                show()
+
+        elif groupByTime == 1:
+            eventsByTime = sort_and_split_by_time(events, remover)  # [:(len(sort_and_split_by_time(events,remover)))-2]
+            eventsByTime.pop(len(eventsByTime) - 2)
+            n = 0
+            outerGrid = gridspec.GridSpec(2, 5)
+            for i in eventsByTime:
+                innerGrid = gridspec.GridSpecFromSubplotSpec(2, 1, subplot_spec=outerGrid[n])
+                sp1 = subplot(innerGrid[0])
+                title(str(i[0][1]) + "s")
+                fit_events_rms(i,0,0,)
+                sp2 = subplot(innerGrid[1])
+                plot_residual_fit(i)
+                setp(sp1.get_xticklabels(), visible=False)
+                n += 1
+            show()
+
     elif mode== 0:
         sp1 = subplot(211)
         title("All Events RMS")
@@ -623,4 +641,5 @@ for i in filePaths:
 #sort_and_split_by_time(eventsTimeList,1)
 
 fit_sections_rms(eventsTimeList,0,1,1)
+rms_fit_and_residual_fit(eventsTimeList,6,1,1,1)
 plot_fit_parameters(eventsTimeList,6,0,1,1)
