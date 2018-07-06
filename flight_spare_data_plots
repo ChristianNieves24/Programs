@@ -381,11 +381,11 @@ def rms_fit_and_residual_fit(events,s,mode=0, remover=0, groupByTime=0):
             eventsByTime = sort_and_split_by_time(events, remover)  # [:(len(sort_and_split_by_time(events,remover)))-2]
             eventsByTime.pop(len(eventsByTime) - 2)
             n = 0
-            outerGrid = gridspec.GridSpec(2, 5)
+            outerGrid = gridspec.GridSpec(2, 3)
             for i in eventsByTime:
                 innerGrid = gridspec.GridSpecFromSubplotSpec(2, 1, subplot_spec=outerGrid[n])
                 sp1 = subplot(innerGrid[0])
-                title(str(i[0][1]) + "s")
+                title(str(i[0][1]) + "s ("+str(len(i))+")")
                 fit_events_rms(i,0,0,)
                 sp2 = subplot(innerGrid[1])
                 plot_residual_fit(i)
