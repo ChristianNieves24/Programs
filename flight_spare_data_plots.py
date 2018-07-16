@@ -1,19 +1,27 @@
-#!/usr/bin/python
+# Interval of bins (a,b)
+a = 190
+b = 221
+#c = 215
+#d = 215# approximate point where the two gaussians meet
+
+
 import h5py
 import os
 import sys
 from glob import glob
 from math import factorial
 from numpy import genfromtxt, sum, array,sqrt,zeros,exp,diag, pi,arange, sin, cos,vstack,log, mean, ones
-from pylab import show, errorbar, scatter,legend, colorbar, xlabel, ylabel, title, imshow,plot, subplot, axvspan,xlim,ylim,stem,setp
+from pylab import show, xticks, tight_layout, savefig, errorbar, scatter,legend, colorbar, xlabel, ylabel, title, imshow,plot, subplot, axvspan,xlim,ylim,stem,setp
 from matplotlib import gridspec
 from scipy.optimize import curve_fit
 
 
 # Interval of bins (a,b)
-a = 190
-b = 221
-c = 210   # approximate point where the two gaussians
+#a = 190
+#b = 221
+#c = 210  # approximate point where the two gaussians meet
+
+############################## Functions for calculations and plots ##############################
 
 
 def sort_and_split_by_time(events,remover=0):
@@ -38,7 +46,6 @@ def sort_and_split_by_time(events,remover=0):
                 n += 1
             else:
                 break
-
     return splitEventList
 
 
@@ -79,7 +86,7 @@ def sort_mesurements_by_time(events, remover=0):
 
 
 # Gaussian curve equation function
-def gaussian_curve(x, a, p, w):
+def gaussian_curve(x, a1, p1, w1, a2=0, p2=0, w2=0, doubleGauss=0):
     # Parameters |
     #---------------------------
     # x          | bin number
@@ -87,12 +94,11 @@ def gaussian_curve(x, a, p, w):
     # p          | peak pos.
     # w          | width
 
-    # return a*exp(-((x-p)**2)/(2*w**2)         # Regular gaussian
-    return a*exp(-(4*log(2)*(x-p)**2)/(w**2))   # In terms of FWTM
+    return a1*exp(-(4*log(2)*(x-p1)**2)/(w1**2))+a2*exp(-(4*log(2)*(x-p2)**2)/(w2**2))   # In terms of FWTM
 
 
 # Returns the reduced Chi Square for a fit
-def chi2_test(observed,expected,wholeFit=0):
+def chi2_test(observed,expected,sumFit=0):
     # Parameters |
     #-------------------------------------------
     # observed   | array/list of measured values
@@ -103,7 +109,7 @@ def chi2_test(observed,expected,wholeFit=0):
     chi2 = 0
     for i in range(len(observed)):
         chi2 += ((observed[i]-expected[i])**2)/expected[i]
-    if wholeFit:
+    if sumFit:
         return chi2/(len(observed)-6)
     else:
         return chi2 / (len(observed) - 3)
@@ -160,7 +166,7 @@ def count_frecuency(bns, allCPS):
 
 
 # Returns a list with the fit values
-def gaussian_fit(y, t1, t2, t3, x1, x2,fullRange=1):
+def gaussian_fit(y, t1a, t2a, t3a, x1, x2,t1b=0, t2b=0, t3b=0, fullRange=1,multGaussian=0):
     # Parameters |
     #--------------------------------------------------
     # y          | list/array of measured y values
@@ -172,41 +178,58 @@ def gaussian_fit(y, t1, t2, t3, x1, x2,fullRange=1):
     # fullRange  | = 1 returns fit values from a to b
     #^^^^^^^^^^^^| = 0 returns fit values from x2 to x2
 
-    initValues = [t1,t2,t3]
+    initValues = [t1a,t2a,t3a,t1b,t2b,t3b]
 
     fitValues = curve_fit(gaussian_curve,range(x1,x2),y,p0 = initValues)
 
-    amp = fitValues[0][0]
-    pkPos = fitValues[0][1]
-    width = fitValues[0][2]
+    amp1 = fitValues[0][0]
+    pkPos1 = fitValues[0][1]
+    width1 = fitValues[0][2]
 
     paramErrors = sqrt(diag(fitValues[1]))
 
-    ampErr = paramErrors[0]
-    pkPosErr = paramErrors[1]
-    widthErr = paramErrors[2]
-
+    amp1Err = paramErrors[0]
+    pkPos1Err = paramErrors[1]
+    width1Err = paramErrors[2]
+    
     fit = []
-    if fullRange:
+    
+    if multGaussian==0:
+        if fullRange:
+            for i in range(a,b):
+                fit.append(gaussian_curve(i,amp1,pkPos1,width1))
+        else:
+            for i in range(x1,x2):
+                fit.append(gaussian_curve(i,amp1,pkPos1,width1))
+        fitData = [fit,amp1,pkPos1,width1, amp1Err,pkPos1Err,width1Err]
+    elif multGaussian==1:
+        amp2 = fitValues[0][3]
+        pkPos2 = fitValues[0][4]
+        width2 = fitValues[0][5]
+        
+        amp2Err = paramErrors[3]
+        pkPos2Err = paramErrors[4]
+        width2Err = paramErrors[5]
+        
         for i in range(a,b):
-            fit.append(gaussian_curve(i,amp,pkPos,width))
-    else:
-        for i in range(x1,x2):
-            fit.append(gaussian_curve(i,amp,pkPos,width))
-    fitData = [fit,amp,pkPos,width, ampErr,pkPosErr,widthErr]
+            fit.append(gaussian_curve(i,amp1,pkPos1,width1, a2=amp2,p2=pkPos2,w2=width2))
+        fitData = [fit,amp1,pkPos1,abs(width1),amp2,pkPos2,abs(width2),amp1Err,pkPos1Err,width1Err,amp2Err,pkPos2Err,width2Err]
     return fitData
 
 
 # Plot bin histogram image
-def plot_bin(bns):
+def plot_bin(bns, sect=0):
     # Parameters |
     #------------------------------------------------------
     # bns        | list => [multidimensional arrays (bins)]
 
     imshow(vstack(bns), origin='0', aspect="auto",cmap="plasma")
-    axvspan(0,a, alpha=0.30, facecolor="black")               # Highlight selected
-    axvspan(b,len(bns[1][0])-1, alpha=0.3, facecolor="black") # interval
-    colorbar()
+    if sect==1:
+        axvspan(0,a, alpha=0.30, facecolor="black")               # Highlight selected
+        axvspan(b,len(bns[1][0])-1, alpha=0.3, facecolor="black") # interval
+    ylabel("Periods")
+    xlabel("Bins")
+    colorbar().set_label("Counts")
 
 
 # Plot the angular response
@@ -227,11 +250,14 @@ def plot_angular_response(az, el, cps):
     ylabel("Elevation (deg)")
     xlim(-40,40)
     ylim(-40,40)
-    #colorbar().set_label("Events/sec")
+    colorbar().set_label("Counts/sec")
 
 
 # Plot 2 gaussian fits for the data
-def fit_events_rms(events, returnFitParam=0, noRMS=0):
+def fit_events_rms(events, returnFitParam=0, noRMS=0, remover=0,
+                   customInitialParameters=0,amp1=0,pkPos1=0,width1=0,amp2=0,pkPos2=0,width2=0, 
+                   multGaussian=0):
+    
     # Parameters     |
     #--------------------------------------------------------------
     # event          | list => [counts (1D array), time, filenames]
@@ -249,65 +275,88 @@ def fit_events_rms(events, returnFitParam=0, noRMS=0):
         for i in range(len(events)):
             s += (events[i][0])
         rms = s
+    
+    if customInitialParameters==0:
+        amp1 = max(rms)
+        pkPos1 = a+list(rms).index(max(rms))
+        width1 = 10
 
-    amp1 = max(rms)
-    pkPos1 = a+list(rms).index(max(rms))
-    width1 = 10
+        amp2 = max(rms[int(pkPos1)-a+10:])
+        pkPos2 = pkPos1+10
+        width2 = 10
 
-    amp2 = max(rms[int(pkPos1)-a+10:])
-    pkPos2 = pkPos1+10
-    width2 = 10
+    if multGaussian==0:
+        fit1Data = gaussian_fit(rms[:(c-a)],amp1,pkPos1,width1,a,c)
+        fit2Data = gaussian_fit(rms[(len(rms)-(b-d)):],amp2,pkPos2,width2,d,b)
 
-    fit1Data = gaussian_fit(rms[:(c-a)],amp1,pkPos1,width1,a,c)
-    fit2Data = gaussian_fit(rms[(c-a):],amp2,pkPos2,width2,c,b)
+        rmsFit1 = fit1Data[0]
+        rmsFit2 = fit2Data[0]
+        fitSum = array(rmsFit1)+array(rmsFit2)
 
-    rmsFit1 = fit1Data[0]
-    rmsFit2 = fit2Data[0]
+        #chi2Fit1 = chisquare(rms[:(c-a)],rmsFit1[:(c-a)])[0]
+        #chi2Fit2 = chisquare(rms[(c-a):],rmsFit2[(c-a):])[0]
 
-    #chi2Fit1 = chisquare(rms[:(c-a)],rmsFit1[:(c-a)])[0]
-    #chi2Fit2 = chisquare(rms[(c-a):],rmsFit2[(c-a):])[0]
+        chi2Fit1 = chi2_test(rms[:(c-a)],rmsFit1[:(c-a)])
+        chi2Fit2 = chi2_test(rms[(c-a):],rmsFit2[(c-a):])
+        chi2FitSum = chi2_test(rms,fitSum,sumFit=1)
 
-    chi2Fit1 = chi2_test(rms[:(c-a)],rmsFit1[:(c-a)])
-    chi2Fit2 = chi2_test(rms[(c-a):],rmsFit2[(c-a):])
+        if returnFitParam:
+            return [[fit1Data,chi2Fit1],[fit2Data,chi2Fit2], chi2FitSum]
+        else:
 
-    if returnFitParam:
-        return [[fit1Data,chi2Fit1],[fit2Data,chi2Fit2]]
-    else:
+            plot(range(a, b), rms, "--o", label="RMS", zorder=1)
+            plot(range(a, b), rmsFit1, "--", label=r"Fit 1 ")#($\chi^2$ = " +str(round(chi2Fit1,2)) + ")")
+            plot(range(a, b), rmsFit2, "--", label=r"Fit 2 ")#($\chi^2$= " + str(round(chi2Fit2,2)) + ")")
 
-        plot(range(a, b), rms, "--o", label="RMS", zorder=1)
-        plot(range(a, b), rmsFit1, "--", label=r"Fit 1 ($\chi^2$ = " +str(round(chi2Fit1,2)) + ")")
-        plot(range(a, b), rmsFit2, "--", label=r"Fit 2 ($\chi^2$= " + str(round(chi2Fit2,2)) + ")")
+            plot(range(a,b),fitSum, "--", label="Sum ($\chi^2$ = " +str(round(chi2FitSum,2)) + ")")
+            legend(loc="upper right")
+            xlabel("Bin Number")
+            ylabel("Counts")
+            
+    if multGaussian==1:
+        fitData = gaussian_fit(rms,amp1,pkPos1,width1,a,b,t1b=amp2,t2b=pkPos2,t3b=width2,multGaussian=multGaussian)
+        fit = fitData[0]
+        chi2Fit = chi2_test(rms,fit,sumFit=1)
+        
+        if returnFitParam:
+            return [fitData,chi2Fit]
+        else:
+            plot(range(a,b),rms,"--o")
+            plot(range(a,b), fit,"--",label=r"Fit ($\chi^2$ = " +str(round(chi2Fit,2)) + ")")
+            ylabel("Counts")
+            xlabel("Bin Number")
+            legend(loc="upper right")
 
-        plot(range(a,b),array(rmsFit1)+array(rmsFit2), "--", label="Sum")
-        legend(loc="upper right")
-        #xlabel("Bin Number")
-        ylabel("Events")
-
-
+            
 # Plot counts vs bins for each individual bin array
-def plot_events_all(events, removeBad=0):
+def plot_events_all(events, removeBad=0, ordered=0,fit=0):
     # Parameters     |
     #--------------------------------------------------------------
     # event          | list => [counts (1D array), time, filenames]
-
-    if removeBad==0:
-        eventsByTime = sort_mesurements_by_time(events)
-    elif removeBad == 1:
-        eventsByTime = sort_mesurements_by_time(events,1)
+    
+    if ordered==1:
+        if removeBad==0:
+            eventsByTime = sort_mesurements_by_time(events)
+        elif removeBad == 1:
+            eventsByTime = sort_mesurements_by_time(events,1)
+    elif ordered==0:
+        eventsByTime=events
+    
     n=0
     for i in eventsByTime:
         subplot(5,8,n+1)
+        plot(range(a,b),i[0], label = str(i[1])+" sec")
+        
+        if fit==1:
+            amp = max(i[0])
+            pkPos = a + list(i[0]).index(max(i[0]))
+            width = 10
+            fit = gaussian_fit(i[0], amp, pkPos, width, a, b)[0]
 
-        amp = max(i[0])
-        pkPos = a + list(i[0]).index(max(i[0]))
-        width = 10
-        fit = gaussian_fit(i[0], amp, pkPos, width, a, b)[0]
-
-        chi2 = chi2_test(i[0],fit)
-
-        plot(range(a,b),i[0], "--o",label = str(i[1])+" sec")
-        plot(range(a, b), fit, "--", label="Fit ($\chi^2$= " + str(round(chi2,2)) + ")")
-        title(str(n+1))
+            chi2 = chi2_test(i[0],fit)
+            plot(range(a, b), fit, "--", label="Fit ($\chi^2$= " + str(round(chi2,2)) + ")")
+            
+        title(str(n+1), fontweight='bold')
         legend(loc="upper right")
         n+=1
     show()
@@ -320,7 +369,7 @@ def fit_sections_rms(events, countsOnly=0, groupByTime=0,remover=0):
     # event          | list => [counts (1D array), time, filenames]
 
     if groupByTime==0:
-        eventsByTime = sort_mesurements_by_time(events)
+        eventsByTime = sort_mesurements_by_time(events,remover)
         n=0
         m=0
         for i in range(0,len(eventsByTime), 6):
@@ -348,12 +397,12 @@ def fit_sections_rms(events, countsOnly=0, groupByTime=0,remover=0):
 
 
 # Plot RMS fits and residuals
-def rms_fit_and_residual_fit(events,s,mode=0, remover=0, groupByTime=0):
+def rms_fit_and_residual_fit(events,s,mode=0, remover=0, groupByTime=0,multGaussian=0, noRMS=0):
     # Parameters     |
     # ------------------------------------------------------------------------------
     # event          | list => [counts (1D array), time, filenames]
     # mode           | = 0 plot by sections
-    # ^^^^^^^^^^^^^^^| = 1 plot for the overall RMS
+    # ^^^^^^^^^^^^^^^| = 1 plot for grouped by time
     # ^^^^^^^^^^^^^^^| = 2 plot for overall RMS to be put along hist and ag response
 
     if mode == 1:
@@ -369,10 +418,10 @@ def rms_fit_and_residual_fit(events,s,mode=0, remover=0, groupByTime=0):
                     eventSection = eventsByTime[i:i + s]
                     sp1 = subplot(innerGrid[0])
                     m += len(eventSection)
-                    title(str(i+1)+" to "+str(m))
-                    fit_events_rms(eventSection)
+                    title(str(i+1)+" to "+str(m), fontweight='bold')
+                    fit_events_rms(eventSection,multGaussian=multGaussian, noRMS=noRMS)
                     sp2 = subplot(innerGrid[1])
-                    plot_residual_fit(eventSection)
+                    plot_residual_fit(eventSection,multGaussian=multGaussian, noRMS=noRMS)
                     setp(sp1.get_xticklabels(), visible=False)
                     n += 1
                 show()
@@ -385,46 +434,51 @@ def rms_fit_and_residual_fit(events,s,mode=0, remover=0, groupByTime=0):
             for i in eventsByTime:
                 innerGrid = gridspec.GridSpecFromSubplotSpec(2, 1, subplot_spec=outerGrid[n])
                 sp1 = subplot(innerGrid[0])
-                title(str(i[0][1]) + "s ("+str(len(i))+")")
-                fit_events_rms(i,0,0,)
+                title(str(i[0][1]) + "s ("+str(len(i))+")",fontweight='bold')
+                fit_events_rms(i,multGaussian=multGaussian, noRMS=noRMS)
                 sp2 = subplot(innerGrid[1])
-                plot_residual_fit(i)
+                plot_residual_fit(i,multGaussian=multGaussian, noRMS=noRMS)
                 setp(sp1.get_xticklabels(), visible=False)
                 n += 1
             show()
 
     elif mode== 0:
         sp1 = subplot(211)
-        title("All Events RMS")
-        fit_events_rms(events)
+        title("All Histograms RMS", fontweight = 'bold')
+        fit_events_rms(events,multGaussian=multGaussian, noRMS=noRMS)
         subplot(212,sharex=sp1)
-        plot_residual_fit(events)
+        plot_residual_fit(events,multGaussian=multGaussian, noRMS=noRMS)
         setp(sp1.get_xticklabels(), visible=False)
         show()
     elif mode == 2:
         sp1 = subplot(426)
         title("All Events RMS")
-        fit_events_rms(events)
+        fit_events_rms(events,multGaussian=multGaussian, noRMS=noRMS)
         subplot(428, sharex=sp1)
-        plot_residual_fit(events)
+        plot_residual_fit(events,multGaussian=multGaussian, noRMS=noRMS)
         setp(sp1.get_xticklabels(), visible=False)
         show()
 
 
 # Plot fit with residual
-def plot_residual_fit(events):
+def plot_residual_fit(events,multGaussian=0, noRMS=0):
     # Parameters     |
     # -------------------------------------------------------------
     # event          | list => [counts (1D array), time, filenames]
 
     s = zeros(len(events[0][0]), float)
-    for i in range(len(events)):
-        # Sum squares
-        s += (events[i][0]) ** 2
-    m = s / len(events)
-    rms = sqrt(m)
+    if noRMS == 0:
+        for i in range(len(events)):
+            # Sum squares
+            s += (events[i][0]) ** 2
+        m = s / len(events)
+        rms = sqrt(m)
+    elif noRMS==1:
+        for i in range(len(events)):
+            s += (events[i][0])
+        rms = s
 
-    plot(range(a, b), rms, "--o", label="RMS")
+    #plot(range(a, b), rms, "--o", label="RMS")
 
     amp1 = max(rms)
     pkPos1 = a + list(rms).index(max(rms))
@@ -432,46 +486,36 @@ def plot_residual_fit(events):
 
     amp2 = max(rms[int(pkPos1) - a + 10:])
     pkPos2 = pkPos1 + 10
-    width2 = 10
+    width2 = 7
 
-    rmsFit1 = gaussian_fit(rms[:(c - a)], amp1, pkPos1, width1, a, c,0)[0]
-    rmsFit2 = gaussian_fit(rms[(c - a):], amp2, pkPos2, width2, c, b,0)[0]
-
-    totalFit = rmsFit1+rmsFit2
+    #totalFit = rmsFit1+rmsFit2
+    if multGaussian==0:
+        rmsFit1 = gaussian_fit(rms[:(c - a)], amp1, pkPos1, width1, a, c)[0]
+        rmsFit2 = gaussian_fit(rms[(c - a):], amp2, pkPos2, width2, c, b)[0]
+        totalFit = array(rmsFit1)+array(rmsFit2)
+    elif multGaussian==1:
+        totalFit = gaussian_fit(rms,amp1,pkPos1,width1,a,b,t1b=amp2,t2b=pkPos2,t3b=width2,multGaussian=multGaussian)[0]
+    
     chi2 = chi2_test(rms, totalFit,1)
-    plot(range(a,b),totalFit,"--r",label=r"Fit ($\chi^2$ = "+str(round(chi2,2))+")")
+    #plot(range(a,b),totalFit,"--r",label=r"Fit ($\chi^2$ = "+str(round(chi2,2))+")")
 
 
     residual = array(rms) - array(totalFit)
-    stem(range(a,b),residual,"--c","oc", label="Residual (Avg = "+str(round(mean(residual),2))+")")
+    stem(range(a,b),residual,"--c","oc", label="Residual") #(Avg = "+str(round(mean(residual),2))+")")
     xlabel("Bin Number")
-    ylabel("Events")
+    ylabel("Residual")
     legend(loc="upper right")
 
 
 # Plot parameter data from the fits
-def plot_fit_parameters(events, s, countsOnly=0, remover=0, groupByTime=0):
+def plot_fit_parameters(events, s=6, remover=0, groupByTime=0,multGaussian=0, noRMS=0):
     # Parameters     |
     # -------------------------------------------------------------
     # event          | list => [counts (1D array), time, filenames]
     # s              | int => number of histograms in one section
 
     listOfFitParameters = []
-    if groupByTime==0:
-        eventsByTime = sort_mesurements_by_time(events,remover)
-        for i in range(0,len(eventsByTime), s):
-            eventSection = eventsByTime[i:i + s]
-            if countsOnly==0:
-                listOfFitParameters.append(fit_events_rms(eventSection,1))
-            elif countsOnly==1:
-                listOfFitParameters.append(fit_events_rms(eventSection, 1, 1))
-    elif groupByTime==1:
-        eventsByTime = sort_and_split_by_time(events,remover) #[:(len(sort_and_split_by_time(events,remover)))-2]
-        eventsByTime.pop(len(eventsByTime)-2)
-        for i in eventsByTime:
-            listOfFitParameters.append(fit_events_rms(i,1,0))
-
-
+    
     chi2F1 = []
     ampF1 = []
     pkPosF1 = []
@@ -489,60 +533,93 @@ def plot_fit_parameters(events, s, countsOnly=0, remover=0, groupByTime=0):
     ampErrF2 = []
     pkPosErrF2 = []
     widthErrF2 = []
+    
+    Chi2 = []
+    
+    if groupByTime==0:
+        eventsByTime = sort_mesurements_by_time(events,remover)
+        for i in range(0,len(eventsByTime), s):
+            eventSection = eventsByTime[i:i + s]
+            listOfFitParameters.append(fit_events_rms(eventSection,returnFitParam=1,multGaussian=multGaussian,noRMS=noRMS))
+    elif groupByTime==1:
+        times = []
+        eventsByTime = sort_and_split_by_time(events,remover) #[:(len(sort_and_split_by_time(events,remover)))-2]
+        eventsByTime.pop(len(eventsByTime)-2)
+        for i in eventsByTime:
+            times.append((i[0][1]))
+            listOfFitParameters.append(fit_events_rms(i,multGaussian=multGaussian,noRMS=noRMS,returnFitParam=1))
+            
+    if multGaussian==0:
+        for i in listOfFitParameters:      # listOfFitParameters[i]
+            chi2F1.append(i[0][1])         # |__[[fit1Data,chi2Fit1],[fit2Data,chi2Fit2],chi2FitSum]
+            ampF1.append(i[0][0][1])       #         |         |__number
+            pkPosF1.append(i[0][0][2])     #         |____list => [i] = [fit,amp,pkPos,width,ampErr,pkPosErr,widthErr]
+            widthF1.append(i[0][0][3])     #                         (from gaussian fit)
+            ampErrF1.append(i[0][0][4])
+            pkPosErrF1.append(i[0][0][5])
+            widthErrF1.append(i[0][0][6])
 
-    for i in listOfFitParameters:      # listOfFitParameters[i]
-        chi2F1.append(i[0][1])         # |__[[fit1Data,chi2Fit1],[fit2Data,chi2Fit2]]
-        ampF1.append(i[0][0][1])       #         |         |__number
-        pkPosF1.append(i[0][0][2])     #         |____list => [i] = [fit,amp,pkPos,width,ampErr,pkPosErr,widthErr]
-        widthF1.append(i[0][0][3])     #                         (from gaussian fit)
-        ampErrF1.append(i[0][0][4])
-        pkPosErrF1.append(i[0][0][5])
-        widthErrF1.append(i[0][0][6])
+            chi2F2.append(i[1][1])
+            ampF2.append(i[1][0][1])
+            pkPosF2.append(i[1][0][2])
+            widthF2.append(i[1][0][3])
+            ampErrF2.append(i[1][0][4])
+            pkPosErrF2.append(i[1][0][5])
+            widthErrF2.append(i[1][0][6])
 
-        chi2F2.append(i[1][1])
-        ampF2.append(i[1][0][1])
-        pkPosF2.append(i[1][0][2])
-        widthF2.append(i[1][0][3])
-        ampErrF2.append(i[1][0][4])
-        pkPosErrF2.append(i[1][0][5])
-        widthErrF2.append(i[1][0][6])
+            Chi2.append(i[2])
+            
+    elif multGaussian==1:
+        for i in listOfFitParameters:
+            Chi2.append(i[1])           # |__[[fitData,chi2Fit]]
+            ampF1.append(i[0][1])       #         |         |__number
+            pkPosF1.append(i[0][2])     #         |____list => [i] = [fit,amp,pkPos,width,ampErr,pkPosErr,widthErr]
+            widthF1.append(i[0][3])     
+            ampF2.append(i[0][4])
+            pkPosF2.append(i[0][5])
+            widthF2.append(i[0][6])
 
+            ampErrF1.append(i[0][7])
+            pkPosErrF1.append(i[0][8])
+            widthErrF1.append(i[0][9])
+            ampErrF2.append(i[0][10])
+            pkPosErrF2.append(i[0][11])
+            widthErrF2.append(i[0][12])
+    
+    subplot(411)
+    plot(Chi2, label="$\chi^2$")
+    xticks(range(6), times)
+    legend(loc="upper left")
+    
     sp1 = subplot(423)
-    errorbar(range(len(pkPosF1)),pkPosF1,yerr=pkPosErrF1, color="r",label="Peak Position")
-    ylim(201, 204)
-    title("Fit 1")
+    errorbar(times,pkPosF1,yerr=pkPosErrF1, color="r",label="Peak Position")
+    #ylim(201, 204)
+    title("Peak 1")
     legend(loc="upper left")
 
-    subplot(223,sharex=sp1)
+    subplot(425,sharex=sp1)
     setp(sp1.get_xticklabels(), visible=False)
-    plot(chi2F1, label="$\chi^2$")
-    errorbar(range(len(ampF1)),ampF1,yerr=ampErrF1, label="Height")
-    errorbar(range(len(widthF1)),widthF1, yerr=widthErrF1,label="Width")
+    #plot(chi2F1, label="$\chi^2$")
+    #errorbar(range(len(ampF1)),ampF1,yerr=ampErrF1, label="Height")
+    errorbar(times,widthF1, yerr=widthErrF1,label="Width")
     legend(loc="upper left")
 
     sp2 = subplot(424)
-    errorbar(range(len(pkPosF2)),pkPosF2,yerr=pkPosErrF1, color ="r", label="Peak Position")
-    ylim(210, 215)
-    title("Fit 2")
+    errorbar(times,pkPosF2,yerr=pkPosErrF1, color ="r", label="Peak Position")
+    #ylim(210, 215)
+    title("Peak 2")
     legend(loc="upper left")
 
-    subplot(224, sharex=sp2)
+    subplot(426, sharex=sp2)
     setp(sp2.get_xticklabels(), visible=False)
-    plot(chi2F2, label="$\chi^2$")
-    errorbar(range(len(ampF2)),ampF2, yerr=ampErrF2, label="Height")
-    errorbar(range(len(widthF2)), widthF2, yerr=widthErrF2, label="Width")
+    #plot(chi2F2, label="$\chi^2$")
+    #errorbar(range(len(ampF2)),ampF2, yerr=ampErrF2, label="Height")
+    errorbar(times, widthF2, yerr=widthErrF2, label="Width")
     legend(loc="upper left")
     show()
 
-    #print("Results-----------")
-    #for i in range(len(ampF1)):
-    #    print("Height: F1: " + str(round(ampF1[i],3)) + "|" + str(round(ampErrF1[i],3)) + " || F2: "+ str(round(ampF2[i],3)) + "|" + str(round(ampErrF2[i],3)))
-    #    print("PkPos : F1: " + str(round(pkPosF1[i], 3)) + "|" + str(round(pkPosErrF1[i], 3)) + " || F2: " + str(round(pkPosF2[i], 3)) + "|" + str(round(pkPosErrF2[i], 3)))
-    #    print("Width: F1: " + str(round(widthF1[i], 3)) + "|" + str(round(widthErrF1[i], 3)) + " || F2: " + str(round(widthF2[i], 3)) + "|" + str(round(widthErrF2[i], 3)))
-
-# Get directories from user
-# h5FilesDir = str(sys.argv[1])
-# logfilesTablePath = str(sys.argv[2])
+    
+############################## Data extraction from hdf5 files ##############################
 
 h5FilesDir = "/home/cnieves/PycharmProjects/CfA/flight_spare_data/h5_files"
 logfilesTablePath = "/home/cnieves/PycharmProjects/CfA/flight_spare_data/data_table.txt"
@@ -592,54 +669,5 @@ for i in filePaths:
             counts1.append(totalCounts1)
             bns.append(bins)
 
-
-###################
-###################
-###################
-
-#subplot(211),plot_bin(binList),subplot(223, aspect=1), plot_angular_response(azimuth, elevation, countsPerSec),subplot(224),fit_events_rms(eventsTimeList), show()
-#plot_events_all(eventsTimeList)
-#fit_sections_rms(eventsTimeList)
-
-
-
-
-#subplot(211),plot_bin(binList),subplot(223, aspect=1), plot_angular_response(azimuth, elevation, counts), rms_fit_and_residual_fit(eventsTimeList,2)
-
-#plot_angular_response(azimuth,elevation,countsPerSec)
-#title("Angular Response (Events/sec)")
-#colorbar().set_label("Events/sec")
-#show()
-#plot_angular_response(azimuth,elevation,counts)
-#title("Angular Response (All Events)")
-#colorbar().set_label("Events")
-#show()
-#plot_angular_response(azimuth,elevation,counts1)
-#title("Angular Response (All Events in 14.5 min)")
-#colorbar().set_label("Events")
-#show()
-
-#count_frecuency(bns,sum(array(countsPerSec))/len(countsPerSec))
-
-
-#fit_events_rms(eventsTimeList)
-
-
-#rms_fit_and_residual_fit(eventsTimeList,5,1)
-
-#fit_sections_rms(eventsTimeList,0) # counts RMS
-#fit_sections_rms(eventsTimeList,1) # total counts
-
-#plot_fit_parameters(eventsTimeList,6,0) # counts RMS
-#plot_fit_parameters(eventsTimeList,6,1) # total counts
-
-#plot_events_all(eventsTimeList,0)
-#plot_events_all(eventsTimeList,1)
-
-#plot_fit_parameters(eventsTimeList,6,0,1)
-
-#sort_and_split_by_time(eventsTimeList,1)
-
-fit_sections_rms(eventsTimeList,0,1,1)
-rms_fit_and_residual_fit(eventsTimeList,6,1,1,1)
-plot_fit_parameters(eventsTimeList,6,0,1,1)
+            
+plot_fit_parameters(events=eventsTimeList,groupByTime=1,noRMS=1,multGaussian=1,remover=1)
