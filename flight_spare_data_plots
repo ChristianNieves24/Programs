@@ -405,7 +405,7 @@ def rms_fit_and_residual_fit(events,s,mode=0, remover=0, groupByTime=0):
         sp1 = subplot(426)
         title("All Events RMS")
         fit_events_rms(events)
-        subplot(428, sharex=sp1)
+        subplot(428, sharex=s
         plot_residual_fit(events)
         setp(sp1.get_xticklabels(), visible=False)
         show()
