@@ -1,0 +1,1 @@
+[IP] Version,IHL,Type Of Service,Total Length,ID,Flags,Fragment Offset,Time to Live,Protocol,Header Checksum,Source Address,Destination Address,[UDP]Source Port,Destination Port,Length, Checksum,[CIP]CIP Marker,Length,Type,CCD_node_number,grade_0,grade_1,grade_2,grade_3,grade_4,grade_5,grade_6,grade_7
